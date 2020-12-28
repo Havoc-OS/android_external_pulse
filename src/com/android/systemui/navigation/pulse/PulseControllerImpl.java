@@ -93,7 +93,7 @@ public class PulseControllerImpl
     // Pulse state
     private boolean mLinked;
     private boolean mPowerSaveModeEnabled;
-    private boolean mScreenOn = true; // MUST initialize as true
+    private boolean mScreenOn = true;
     private boolean mMusicStreamMuted;
     private boolean mLeftInLandscape;
     private boolean mScreenPinningEnabled;
@@ -102,19 +102,16 @@ public class PulseControllerImpl
 
     private boolean mNavPulseEnabled;
     private boolean mLsPulseEnabled;
+    private boolean mAmbPulseEnabled;
     private boolean mKeyguardShowing;
     private boolean mDozing;
-
+    private boolean mKeyguardGoingAway;
     private boolean mRenderLoadedOnce;
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            /*if (Intent.ACTION_SCREEN_OFF.equals(action)) {
-                mScreenOn = false;
-                doLinkage();
-            } else */
             if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 mScreenOn = true;
                 doLinkage();
@@ -178,6 +175,9 @@ public class PulseControllerImpl
                     Settings.Secure.getUriFor(Settings.Secure.PULSE_LOCATION), false, this,
                     UserHandle.USER_ALL);
             mContext.getContentResolver().registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.AMBIENT_PULSE_ENABLED), false, this,
+                    UserHandle.USER_ALL);
+            mContext.getContentResolver().registerContentObserver(
                     Settings.Secure.getUriFor(Settings.Secure.PULSE_RENDER_STYLE), false, this,
                     UserHandle.USER_ALL);
             mContext.getContentResolver().registerContentObserver(
@@ -189,6 +189,7 @@ public class PulseControllerImpl
         public void onChange(boolean selfChange, Uri uri) {
             if (uri.equals(Settings.Secure.getUriFor(Settings.Secure.PULSE_ENABLED))
                     || uri.equals(Settings.Secure.getUriFor(Settings.Secure.PULSE_LOCATION))
+                    || uri.equals(Settings.Secure.getUriFor(Settings.Secure.AMBIENT_PULSE_ENABLED))
                     || uri.equals(Settings.System.getUriFor(Settings.System.NAVIGATION_BAR_SHOW))) {
                 updateEnabled();
                 updatePulseVisibility();
@@ -213,6 +214,8 @@ public class PulseControllerImpl
                     Settings.Secure.PULSE_LOCATION, 0, UserHandle.USER_CURRENT);
             mNavPulseEnabled = enabled && location != 0 && navBar;
             mLsPulseEnabled = enabled && location != 1;
+            mAmbPulseEnabled = enabled && Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                    Settings.Secure.AMBIENT_PULSE_ENABLED, 0, UserHandle.USER_CURRENT) == 1;
         }
 
         void updateRenderMode() {
@@ -223,7 +226,10 @@ public class PulseControllerImpl
 
     public void notifyKeyguardGoingAway() {
         if (mLsPulseEnabled) {
-            detachPulseFrom(getLsVisualizer(), allowNavPulse(getNavbarFrame())/*keep linked*/);
+            detachPulseFrom(getLsVisualizer(), allowNavPulse(getNavbarFrame()));
+            mKeyguardGoingAway = true;
+            updatePulseVisibility();
+            mKeyguardGoingAway = false;
         }
     }
 
@@ -235,13 +241,14 @@ public class PulseControllerImpl
     private void updatePulseVisibility() {
         NavigationBarFrame nv = getNavbarFrame();
         VisualizerView vv = getLsVisualizer();
+        boolean allowAmbPulse = allowAmbPulse(vv);
         boolean allowLsPulse = allowLsPulse(vv);
         boolean allowNavPulse = allowNavPulse(nv);
 
-        if (!allowNavPulse) detachPulseFrom(nv, allowLsPulse/*keep linked*/);
-        if (!allowLsPulse) detachPulseFrom(vv, allowNavPulse/*keep linked*/);
+        if (!allowNavPulse) detachPulseFrom(nv, allowLsPulse);
+        if (!allowLsPulse && !allowAmbPulse) detachPulseFrom(vv, allowNavPulse);
 
-        if (allowLsPulse) attachPulseTo(vv);
+        if (allowLsPulse || allowAmbPulse) attachPulseTo(vv);
         else if (allowNavPulse) attachPulseTo(nv);
     }
 
@@ -274,6 +281,11 @@ public class PulseControllerImpl
 
     private VisualizerView getLsVisualizer() {
         return mStatusbar != null ? mStatusbar.getLsVisualizer() : null;
+    }
+
+    private boolean allowAmbPulse(VisualizerView v) {
+        if (v == null) return false;
+        return v.isAttached() && mAmbPulseEnabled && mKeyguardShowing && mDozing;
     }
 
     private boolean allowNavPulse(NavigationBarFrame v) {
@@ -310,7 +322,6 @@ public class PulseControllerImpl
         SettingsObserver settingsObserver = new SettingsObserver(mainHandler);
         settingsObserver.register();
         settingsObserver.updateSettings();
-        //loadRenderer();
     }
 
     @Override
@@ -413,7 +424,7 @@ public class PulseControllerImpl
 
     private void turnOnPulse() {
         if (shouldDrawPulse()) {
-            mStreamHandler.resume(); // let bytes hit visualizer
+            mStreamHandler.resume();
         }
     }
 
@@ -451,11 +462,14 @@ public class PulseControllerImpl
      * @return true if unlink is required, false if unlinking is not mandatory
      */
     private boolean isUnlinkRequired() {
-        return !mScreenOn
-                || mPowerSaveModeEnabled
+        boolean result = mPowerSaveModeEnabled
                 || mMusicStreamMuted
                 || mScreenPinningEnabled
                 || !mAttached;
+        if (!mAmbPulseEnabled) {
+            result = result || !mScreenOn;
+        }
+        return result;
     }
 
     /**
@@ -464,13 +478,15 @@ public class PulseControllerImpl
      * @return true if all conditions are met to allow link, false if and conditions are not met
      */
     private boolean isAbleToLink() {
-        return mScreenOn
-                && mIsMediaPlaying
-                //&& !mLinked
+        boolean result = mIsMediaPlaying
                 && !mPowerSaveModeEnabled
                 && !mMusicStreamMuted
                 && !mScreenPinningEnabled
                 && mAttached;
+        if (!mAmbPulseEnabled) {
+            result = result || mScreenOn;
+        }
+        return result;
     }
 
     private void doUnlinkVisualizer() {
@@ -499,7 +515,6 @@ public class PulseControllerImpl
     private void doLinkage() {
         if (isUnlinkRequired()) {
             if (mLinked) {
-                // explicitly unlink
                 doUnlinkVisualizer();
             }
         } else {
