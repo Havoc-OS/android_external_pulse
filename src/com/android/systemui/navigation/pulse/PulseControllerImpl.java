@@ -104,7 +104,6 @@ public class PulseControllerImpl
     private boolean mLsPulseEnabled;
     private boolean mKeyguardShowing;
     private boolean mDozing;
-    private boolean mKeyguardGoingAway;
 
     private boolean mRenderLoadedOnce;
 
@@ -223,9 +222,7 @@ public class PulseControllerImpl
 
     public void notifyKeyguardGoingAway() {
         if (mLsPulseEnabled) {
-            mKeyguardGoingAway = true;
-            updatePulseVisibility(false);
-            mKeyguardGoingAway = false;
+            detachPulseFrom(getLsVisualizer(), allowNavPulse(getNavbarFrame())/*keep linked*/);
         }
     }
 
@@ -235,34 +232,18 @@ public class PulseControllerImpl
     }
 
     private void updatePulseVisibility(boolean forceStop) {
-        if (mStatusbar == null) return;
+        NavigationBarFrame nv = getNavbarFrame();
+        VisualizerView vv = getLsVisualizer();
+        boolean allowLsPulse = !forceStop && allowLsPulse(vv);
+        boolean allowNavPulse = !forceStop && allowNavPulse(nv);
 
-        NavigationBarFrame nv = mStatusbar.getNavigationBarView() != null ?
-                mStatusbar.getNavigationBarView().getNavbarFrame() : null;
-        VisualizerView vv = mStatusbar.getLsVisualizer();
-        boolean allowLsPulse = !forceStop && vv != null && vv.isAttached()
-                && mLsPulseEnabled && mKeyguardShowing && !mDozing;
-        boolean allowNavPulse = !forceStop && nv!= null && nv.isAttached()
-            && mNavPulseEnabled && !mKeyguardShowing;
-
-        if (mKeyguardGoingAway) {
-            detachPulseFrom(vv, allowNavPulse/*keep linked*/);
-            return;
-        }
-        if (!allowNavPulse) {
-            detachPulseFrom(nv, allowLsPulse/*keep linked*/);
-        }
-        if (!allowLsPulse) {
-            detachPulseFrom(vv, allowNavPulse/*keep linked*/);
-        }
+        if (!allowNavPulse) detachPulseFrom(nv, allowLsPulse/*keep linked*/);
+        if (!allowLsPulse) detachPulseFrom(vv, allowNavPulse/*keep linked*/);
 
         if (forceStop) return;
 
-        if (allowLsPulse) {
-            attachPulseTo(vv);
-        } else if (allowNavPulse) {
-            attachPulseTo(nv);
-        }
+        if (allowLsPulse) attachPulseTo(vv);
+        else if (allowNavPulse) attachPulseTo(nv);
     }
 
     public void setDozing(boolean dozing) {
@@ -282,8 +263,29 @@ public class PulseControllerImpl
         }
     }
 
+    private NavigationBarFrame getNavbarFrame() {
+        if (mStatusbar == null || mStatusbar.getNavigationBarView() == null)
+            return null;
+        return mStatusbar.getNavigationBarView().getNavbarFrame();
+    }
+
     private NavigationBarView getNavigationBarView() {
         return mStatusbar != null ? mStatusbar.getNavigationBarView() : null;
+    }
+
+    private VisualizerView getLsVisualizer() {
+        return mStatusbar != null ? mStatusbar.getLsVisualizer() : null;
+    }
+
+    private boolean allowNavPulse(NavigationBarFrame v) {
+        if (v == null) return false;
+        return v.isAttached() && mNavPulseEnabled && !mKeyguardShowing;
+    }
+
+    private boolean allowLsPulse(VisualizerView v) {
+        if (v == null) return false;
+        return v.isAttached() && mLsPulseEnabled
+                && mKeyguardShowing && !mDozing;
     }
 
     @Inject
@@ -423,11 +425,9 @@ public class PulseControllerImpl
     }
 
     private Renderer getRenderer() {
-        if (mPulseStyle == RENDER_STYLE_SOLID_LINES) {
+        if (mPulseStyle == RENDER_STYLE_SOLID_LINES)
             return new SolidLineRenderer(mContext, mHandler, mPulseView, mColorController);
-        } else {
-            return new FadingBlockRenderer(mContext, mHandler, mPulseView, mColorController);
-        }
+        return new FadingBlockRenderer(mContext, mHandler, mPulseView, mColorController);
     }
 
     private boolean isMusicMuted(int streamType) {
@@ -484,6 +484,7 @@ public class PulseControllerImpl
                     mRenderer.onVisualizerLinkChanged(false);
                 }
                 mPulseView.postInvalidate();
+
                 if (getNavigationBarView() != null)
                     getNavigationBarView().hideHomeHandle(false);
                 notifyStateListeners(false);
