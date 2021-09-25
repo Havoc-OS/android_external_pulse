@@ -46,7 +46,6 @@ public class SolidLineRenderer extends Renderer {
     private float[] mFFTPoints;
 
     private int mDbFuzzFactor;
-    private boolean mVertical;
     private boolean mLeftInLandscape;
     private int mWidth, mHeight, mUnits;
 

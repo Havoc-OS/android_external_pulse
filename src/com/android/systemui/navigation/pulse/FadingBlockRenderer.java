@@ -40,7 +40,6 @@ public class FadingBlockRenderer extends Renderer {
     private static final int DBFUZZ = 2;
     private final Paint mPaint;
     private final Paint mFadePaint;
-    private boolean mVertical;
     private boolean mLeftInLandscape;
     private FFTAverage[] mFFTAverage;
     private float[] mFFTPoints;
@@ -188,17 +187,20 @@ public class FadingBlockRenderer extends Renderer {
         void register() {
             ContentResolver resolver = mContext.getContentResolver();
             resolver.registerContentObserver(
-                    Settings.Secure.getUriFor(Settings.Secure.PULSE_CUSTOM_DIMEN), false, this,
+                    Settings.Secure.getUriFor(Settings.Secure.PULSE_CUSTOM_DIMEN), false,
+                    this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(
-                    Settings.Secure.getUriFor(Settings.Secure.PULSE_CUSTOM_DIV), false, this,
+                    Settings.Secure.getUriFor(Settings.Secure.PULSE_CUSTOM_DIV), false,
+                    this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(
                     Settings.Secure.getUriFor(Settings.Secure.PULSE_FILLED_BLOCK_SIZE), false,
                     this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(
-                    Settings.Secure.getUriFor(Settings.Secure.PULSE_EMPTY_BLOCK_SIZE), false, this,
+                    Settings.Secure.getUriFor(Settings.Secure.PULSE_EMPTY_BLOCK_SIZE), false,
+                    this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(
                     Settings.Secure.getUriFor(Settings.Secure.PULSE_CUSTOM_FUDGE_FACTOR), false,

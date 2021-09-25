@@ -38,6 +38,7 @@ public abstract class Renderer implements VisualizerStreamHandler.Listener {
     private long mRenderCounter;
 
     protected boolean mKeyguardShowing;
+    protected boolean mVertical;
 
     public Renderer(Context context, Handler handler, PulseView view, ColorController colorController) {
         mContext = context;
@@ -58,6 +59,7 @@ public abstract class Renderer implements VisualizerStreamHandler.Listener {
 
     public void setKeyguardShowing(boolean showing) {
         mKeyguardShowing = showing;
+        mVertical = mKeyguardShowing ? false : mView.getHeight() > mView.getWidth();
         onSizeChanged(0, 0, 0, 0);
     }
 
